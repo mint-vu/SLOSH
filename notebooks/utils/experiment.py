@@ -9,7 +9,7 @@ import os
 import faiss
 from scipy import stats
 from tqdm import tqdm
-
+import time
 
 class Experiment():
     def __init__(self, dataset, pooling, ann, k, random_state=0, **kwargs):
@@ -23,16 +23,26 @@ class Experiment():
         self.pooling = self.init_pooling(kwargs)
         self.embedding = self.load_embedding('base')
         self.ann = self.train_ann()
+        self.time_report = {'dataset': dataset, 'pooling': pooling, 'ann': ann}
+
+    def get_time_report(self):
+        return self.time_report
         
     
     def test(self):
-        test_emb = self.compute_embedding('query')
+        test_emb, emb_time = self.compute_embedding('query')
+        self.time_report['emb_time_per_sample'] = emb_time
         ann = self.ann
+
+        start = time.time()
         if self.ann_name == 'faiss-lsh':
             D, I = ann.search(test_emb, self.k)
             labels = self.data['y_train']
             knn_labels = labels[I]
-            
+
+        passed = time.time() - start
+        self.time_report['inf_time_per_sample'] = passed / test_emb.shape[0]
+
         preds = stats.mode(knn_labels.T)[0].squeeze()
         gts = self.data['y_test']
         acc = accuracy_score(gts, preds)
@@ -67,8 +77,7 @@ class Experiment():
             X_test = df_test[df_test.columns[1:]].to_numpy()
             y_test = df_test[df_test.columns[0]].to_numpy()
             X_test = X_test.reshape(X_test.shape[0], -1, 3)
-        
-        print('dataset loaded!')
+
         return {'x_train': X_train, 'y_train': y_train, 'x_test': X_test, 'y_test': y_test}
         
     
@@ -104,7 +113,7 @@ class Experiment():
         if not os.path.exists(emb_dir):
             out_dir = os.path.dirname(emb_dir)
             os.makedirs(out_dir, exist_ok=True)
-            emb = self.compute_embedding(target)
+            emb, time_passed = self.compute_embedding(target)
             np.save(emb_dir, emb)
         else:
             print('loading cached base embedding...')
@@ -118,7 +127,8 @@ class Experiment():
         processed_samples = [torch.from_numpy(sample).to(torch.float)
                              for sample in self.preprocess_samples(target)]
 
-        print(f'compute {target} embedding')
+        print(f'compute {target} embedding...')
+        start = time.time()
         if self.pooling_name == 'swe':
             embs = []
             for sample in tqdm(processed_samples):
@@ -126,7 +136,10 @@ class Experiment():
                 embs.append(v)
 
             embs = torch.stack(embs, dim=0)
-            return embs.reshape(embs.shape[0],-1).numpy()
+            embs = embs.reshape(embs.shape[0],-1).numpy()
+
+        passed = time.time() - start
+        return embs, passed / len(processed_samples)
     
     
     def preprocess_samples(self, target):
