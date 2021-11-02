@@ -2,17 +2,17 @@ import numpy as np
 from sklearn.metrics import accuracy_score
 from sklearn.cluster import KMeans
 import torch
-import faiss
 import pandas as pd
-from .poolings import SWE
+from .poolings import SWE, FSP
 import os
 import faiss
 from scipy import stats
 from tqdm import tqdm
 import time
 
+
 class Experiment():
-    def __init__(self, dataset, pooling, ann, k, random_state=0, **kwargs):
+    def __init__(self, dataset, pooling, ann, k, ref_size=None, random_state=0, **kwargs):
         self.dataset_name = dataset
         self.pooling_name = pooling
         self.ann_name = ann
@@ -20,15 +20,15 @@ class Experiment():
         self.state = random_state
         
         self.data = self.load_dataset()
-        self.pooling = self.init_pooling(kwargs)
+        self.ref_size = ref_size
+        self.pooling = self.init_pooling(**kwargs)
         self.embedding = self.load_embedding('base')
         self.ann = self.train_ann()
         self.time_report = {'dataset': dataset, 'pooling': pooling, 'ann': ann}
 
     def get_time_report(self):
         return self.time_report
-        
-    
+
     def test(self):
         test_emb, emb_time = self.compute_embedding('query')
         self.time_report['emb_time_per_sample'] = emb_time
@@ -36,6 +36,7 @@ class Experiment():
 
         start = time.time()
         if self.ann_name == 'faiss-lsh':
+            print(test_emb.shape)
             D, I = ann.search(test_emb, self.k)
             labels = self.data['y_train']
             knn_labels = labels[I]
@@ -48,8 +49,7 @@ class Experiment():
         acc = accuracy_score(gts, preds)
         
         return acc
-        
-       
+
     def train_ann(self):
         assert self.ann_name in ['faiss-lsh', 'annoy']
         if self.ann_name == 'faiss-lsh':
@@ -61,10 +61,9 @@ class Experiment():
             ann.add(emb)
             
         return ann
-            
         
     def load_dataset(self):
-        assert self.dataset_name in ['point_mnist', 'modelnet40'], f'unknown dataset {dataset}'
+        assert self.dataset_name in ['point_mnist', 'modelnet40'], f'unknown dataset {self.dataset_name}'
         print('loading dataset...')
         if self.dataset_name == 'point_mnist':
             df_train = pd.read_csv("../dataset/pointcloud_mnist_2d/train.csv")
@@ -79,19 +78,20 @@ class Experiment():
             X_test = X_test.reshape(X_test.shape[0], -1, 3)
 
         return {'x_train': X_train, 'y_train': y_train, 'x_test': X_test, 'y_test': y_test}
-        
-    
-    def init_pooling(self, kwargs):
+
+    def init_pooling(self, **kwargs):
         assert self.pooling_name in ['swe', 'fs', 'jannossy'], f'unknown pooling {self.pooling_name}'
         if self.pooling_name == 'swe':
             assert 'num_slices' in kwargs.keys(), 'keyword argument num_slices should be provided'
-            ref = self.init_reference()
+            ref = self.init_reference(num_slices=kwargs['num_slices'])
             pooling = SWE(ref, kwargs['num_slices'])
+        elif self.pooling_name == 'fs':
+            ref = self.init_reference()
+            pooling = FSP(ref, self.ref_size)
             
         return pooling
     
-    
-    def init_reference(self):
+    def init_reference(self, **kwargs):
         if self.pooling_name == 'swe':
             if self.dataset_name == 'point_mnist':
                 print('preprocess samples...')
@@ -99,14 +99,17 @@ class Experiment():
                 processed_samples = np.concatenate(processed_samples_lst, axis=0)
 
                 np.random.seed(self.state)
-                ind=np.random.permutation(processed_samples.shape[0])[:10000]
+                ind = np.random.permutation(processed_samples.shape[0])[:10000]
 
-                print('compute referece...')
-                kmeans = KMeans(n_clusters=50, random_state=self.state).fit(processed_samples[ind])
+                print('compute reference...')
+                kmeans = KMeans(n_clusters=self.ref_size // kwargs['num_slices'], random_state=self.state).fit(processed_samples[ind])
                 ref = torch.from_numpy(kmeans.cluster_centers_).to(torch.float)
         
-        return ref
+        elif self.pooling_name == 'fs':
+            if self.dataset_name == 'point_mnist':
+                ref = torch.ones(self.ref_size//2, 2).to(torch.float)
         
+        return ref
         
     def load_embedding(self, target):
         emb_dir = f'results/cached_emb/{self.dataset_name}_{self.ann_name}_{self.pooling_name}.npy'
@@ -120,28 +123,25 @@ class Experiment():
             emb = np.load(emb_dir)
             
         return emb
-    
-    
+
     def compute_embedding(self, target):
         pooling = self.pooling
-        processed_samples = [torch.from_numpy(sample).to(torch.float)
-                             for sample in self.preprocess_samples(target)]
 
         print(f'compute {target} embedding...')
         start = time.time()
-        if self.pooling_name == 'swe':
+        if self.pooling_name in ['swe', 'fs']:
+            samples = [torch.from_numpy(sample).to(torch.float) for sample in self.preprocess_samples(target)]
             embs = []
-            for sample in tqdm(processed_samples):
+            for sample in tqdm(samples):
                 v = pooling.embedd(sample)
                 embs.append(v)
 
             embs = torch.stack(embs, dim=0)
-            embs = embs.reshape(embs.shape[0],-1).numpy()
+            embs = embs.reshape(embs.shape[0], -1).numpy()
 
         passed = time.time() - start
-        return embs, passed / len(processed_samples)
-    
-    
+        return embs, passed / len(samples)
+
     def preprocess_samples(self, target):
         if target == 'base':
             X = self.data['x_train']
@@ -156,7 +156,3 @@ class Experiment():
                 samples.append(sample)
         
         return samples
-        
-
-        
-        
