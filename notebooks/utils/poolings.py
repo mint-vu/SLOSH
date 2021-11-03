@@ -57,3 +57,14 @@ class FSP():
         x_interp = Interp1d()(x_domain, x_sorted.T, ref_domain).T
 
         return x_interp * self.ref
+
+
+class GeM():
+    def __init__(self, power):
+        self.p = power
+        
+    def embedd(self, x):
+        power = self.p
+        p_avg = torch.cat([torch.pow(torch.pow(x, p).mean(0), 1/p) for p in range(1, power + 1)])
+        return p_avg
+    

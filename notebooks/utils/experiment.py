@@ -3,7 +3,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.cluster import KMeans
 import torch
 import pandas as pd
-from .poolings import SWE, FSP
+from .poolings import SWE, FSP, GeM
 import os
 import faiss
 from scipy import stats
@@ -55,7 +55,7 @@ class Experiment():
         if self.ann_name == 'faiss-lsh':
             emb = self.embedding
             d = emb.shape[1]
-            n_bits = 2 * d
+            n_bits = 2 * max(d, self.ref_size)
             ann = faiss.IndexLSH(d, n_bits)
             ann.train(emb)
             ann.add(emb)
@@ -80,7 +80,7 @@ class Experiment():
         return {'x_train': X_train, 'y_train': y_train, 'x_test': X_test, 'y_test': y_test}
 
     def init_pooling(self, **kwargs):
-        assert self.pooling_name in ['swe', 'fs', 'jannossy'], f'unknown pooling {self.pooling_name}'
+        assert self.pooling_name in ['swe', 'fs', 'jannossy', 'gem'], f'unknown pooling {self.pooling_name}'
         if self.pooling_name == 'swe':
             assert 'num_slices' in kwargs.keys(), 'keyword argument num_slices should be provided'
             ref = self.init_reference(num_slices=kwargs['num_slices'])
@@ -88,6 +88,9 @@ class Experiment():
         elif self.pooling_name == 'fs':
             ref = self.init_reference()
             pooling = FSP(ref, self.ref_size)
+        elif self.pooling_name == 'gem':
+            assert 'power' in kwargs.keys(), 'keyword argument power should be provided'
+            pooling = GeM(kwargs['power'])
             
         return pooling
     
@@ -102,7 +105,9 @@ class Experiment():
                 ind = np.random.permutation(processed_samples.shape[0])[:10000]
 
                 print('compute reference...')
-                kmeans = KMeans(n_clusters=self.ref_size // kwargs['num_slices'], random_state=self.state).fit(processed_samples[ind])
+                kmeans = KMeans(
+                    n_clusters=self.ref_size // kwargs['num_slices'], random_state=self.state
+                ).fit(processed_samples[ind])
                 ref = torch.from_numpy(kmeans.cluster_centers_).to(torch.float)
         
         elif self.pooling_name == 'fs':
@@ -117,7 +122,7 @@ class Experiment():
             out_dir = os.path.dirname(emb_dir)
             os.makedirs(out_dir, exist_ok=True)
             emb, time_passed = self.compute_embedding(target)
-            np.save(emb_dir, emb)
+            # np.save(emb_dir, emb)
         else:
             print('loading cached base embedding...')
             emb = np.load(emb_dir)
@@ -129,7 +134,7 @@ class Experiment():
 
         print(f'compute {target} embedding...')
         start = time.time()
-        if self.pooling_name in ['swe', 'fs']:
+        if self.pooling_name in ['swe', 'fs', 'gem']:
             samples = [torch.from_numpy(sample).to(torch.float) for sample in self.preprocess_samples(target)]
             embs = []
             for sample in tqdm(samples):
