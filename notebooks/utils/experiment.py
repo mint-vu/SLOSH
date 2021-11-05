@@ -10,6 +10,8 @@ import faiss
 from scipy import stats
 from tqdm import tqdm
 import time
+from torch_geometric.datasets import ModelNet
+from torch_geometric.transforms import SamplePoints
 
 
 class Experiment():
@@ -93,6 +95,21 @@ class Experiment():
             X_train, y_train, X_test, y_test, classnames = data
             y_train = np.array(y_train)
             y_test = np.array(y_test)
+            
+        elif self.dataset_name == 'modelnet40':
+            data_train_ = ModelNet(root='../modelnet', name='40', train=True, transform=SamplePoints(1024))
+            data_test_ = ModelNet(root='../modelnet', name='40', train=False, transform=SamplePoints(1024))
+
+            X_train_ = np.array([data_train_[i].pos.numpy() for i in range(len(data_train_))])
+            y_train = np.array([data_train_[i].y.numpy() for i in range(len(data_train_))])
+            X_test_ = np.array([data_test_[i].pos.numpy() for i in range(len(data_test_))])
+            y_test = np.array([data_test_[i].y.numpy() for i in range(len(data_test_))])
+            def z_normalize(data):
+                mu = np.mean(data,axis=(1,2),keepdims=True)
+                sigma = np.std(data,axis=(1,2),keepdims=True)
+                return (data-mu)/sigma
+            X_train = z_normalize(X_train_)
+            X_test = z_normalize(X_test_)
 
         return {'x_train': X_train, 'y_train': y_train, 'x_test': X_test, 'y_test': y_test}
 
@@ -130,12 +147,27 @@ class Experiment():
                     n_clusters=n_clusters, random_state=self.state
                 ).fit(processed_samples[ind])
                 ref = torch.from_numpy(kmeans.cluster_centers_).to(torch.float)
+            elif self.dataset_name == 'modelnet40':
+                print('preprocess samples...')
+                processed_samples_lst = self.preprocess_samples('base')
+                processed_samples = np.concatenate(processed_samples_lst, axis=0)
+                np.random.seed(self.state)
+                ind = np.random.permutation(processed_samples.shape[0])[:3000]
+
+                print('compute reference...')
+                n_clusters = self.ref_size // kwargs['num_slices']
+                kmeans = KMeans(
+                    n_clusters=n_clusters, random_state=self.state
+                ).fit(processed_samples[ind])
+                ref = torch.from_numpy(kmeans.cluster_centers_).to(torch.float)
 
         elif self.pooling_name == 'fs':
             if self.dataset_name == 'point_mnist':
                 ref = torch.ones(self.ref_size // 2, 2).to(torch.float)
             elif self.dataset_name == 'oxford':
                 ref = torch.ones(self.ref_size // 512, 512).to(torch.float)
+            elif self.dataset_name == 'modelnet40':
+                ref = torch.ones(self.ref_size // 3, 3).to(torch.float)
         
         return ref
         
@@ -185,7 +217,7 @@ class Experiment():
                 sample = X[i, :, :]
                 sample = sample[sample[:, 2] > 0][:, :2]
                 samples.append(sample)
-        elif self.dataset_name == 'oxford':
+        elif self.dataset_name in ['oxford', 'modelnet40']:
             samples = X
         
         return samples
