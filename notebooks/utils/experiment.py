@@ -10,12 +10,19 @@ import faiss
 from scipy import stats
 from tqdm import tqdm
 import time
+from sklearn.decomposition import PCA, KernelPCA
+import umap
 from torch_geometric.datasets import ModelNet
 from torch_geometric.transforms import SamplePoints
 
 
 class Experiment():
-    def __init__(self, dataset, pooling, ann, k=9, ref_size=None, code_length=None, random_state=0, **kwargs):
+    def __init__(self, dataset, pooling, ann,
+                 k=9, project=False, projector='pca', n_components=2, ref_size=None, code_length=None, random_state=0, **kwargs):
+        self.dim_dict = {'point_mnist': 2, 'oxford': 512}
+        self.projector_dict = {'pca': PCA(n_components=n_components),
+                               'kernel_pca': KernelPCA(n_components=n_components, kernel='cosine'),
+                               'umap': umap.UMAP(n_components=n_components, verbose=True)}
         self.dataset_name = dataset
         self.pooling_name = pooling
         self.ann_name = ann
@@ -29,6 +36,9 @@ class Experiment():
         
         self.data = self.load_dataset()
         self.ref_size = ref_size
+        self.n_components = n_components if project else self.dim_dict[self.dataset_name]
+        self.project = project
+        self.projector = self.projector_dict[projector]
         self.pooling = self.init_pooling(**kwargs)
         self.embedding = self.load_embedding('base')
         self.ann = self.train_ann()
@@ -134,42 +144,30 @@ class Experiment():
     
     def init_reference(self, **kwargs):
         if self.pooling_name == 'swe':
-            if self.dataset_name in ['point_mnist', 'oxford']:
-                print('preprocess samples...')
-                processed_samples_lst = self.preprocess_samples('base')
-                processed_samples = np.concatenate(processed_samples_lst, axis=0)
-                np.random.seed(self.state)
-                ind = np.random.permutation(processed_samples.shape[0])[:10000]
-
-                print('compute reference...')
-                n_clusters = self.ref_size // kwargs['num_slices']
-                kmeans = KMeans(
-                    n_clusters=n_clusters, random_state=self.state
-                ).fit(processed_samples[ind])
-                ref = torch.from_numpy(kmeans.cluster_centers_).to(torch.float)
-            elif self.dataset_name == 'modelnet40':
-                print('preprocess samples...')
-                processed_samples_lst = self.preprocess_samples('base')
-                processed_samples = np.concatenate(processed_samples_lst, axis=0)
-                np.random.seed(self.state)
-                ind = np.random.permutation(processed_samples.shape[0])[:3000]
-
-                print('compute reference...')
-                n_clusters = self.ref_size // kwargs['num_slices']
-                kmeans = KMeans(
-                    n_clusters=n_clusters, random_state=self.state
-                ).fit(processed_samples[ind])
-                ref = torch.from_numpy(kmeans.cluster_centers_).to(torch.float)
+            ref = torch.ones(self.ref_size, self.n_components)
 
         elif self.pooling_name == 'fs':
-            if self.dataset_name == 'point_mnist':
-                ref = torch.ones(self.ref_size // 2, 2).to(torch.float)
-            elif self.dataset_name == 'oxford':
-                ref = torch.ones(self.ref_size // 512, 512).to(torch.float)
-            elif self.dataset_name == 'modelnet40':
-                ref = torch.ones(self.ref_size // 3, 3).to(torch.float)
+            ref = torch.ones(self.ref_size, self.n_components).to(torch.float)
         
         return ref
+
+    def fit_projector(self):
+        if self.dataset_name == 'oxford':
+            print('preprocess samples...')
+            processed_samples_lst = self.preprocess_samples('base')
+
+            np.random.seed(self.state)
+            sample_ind = np.random.permutation(len(processed_samples_lst))[:5000]
+            selected_samples_lst = [processed_samples_lst[i] for i in sample_ind]
+
+            np.random.seed(self.state)
+            downsampled_samples = []
+            for sample in tqdm(selected_samples_lst):
+                ind = np.random.permutation(sample.shape[0])[:1]
+                downsampled_samples.append(sample[ind, :])
+            downsampled_samples = np.concatenate(downsampled_samples, axis=0)
+            self.projector.fit(downsampled_samples)
+            # print(self.projector.explained_variance_ratio_)
         
     def load_embedding(self, target):
         if self.pooling_name == 'gem':
@@ -188,12 +186,21 @@ class Experiment():
         return emb
 
     def compute_embedding(self, target):
+        if target == 'base' and self.project:
+            self.fit_projector()
         pooling = self.pooling
 
         print(f'compute {target} embedding...')
         start = time.time()
         if self.pooling_name in ['swe', 'fs', 'gem', 'cov']:
-            samples = [torch.from_numpy(sample).to(torch.float) for sample in self.preprocess_samples(target)]
+            preprocess_samples = self.preprocess_samples(target)
+            if self.dataset_name == 'oxford' and self.project:
+                samples = []
+                for sample in tqdm(preprocess_samples):
+                    projected = self.projector.transform(sample)
+                    samples.append(torch.from_numpy(projected).to(torch.float))
+            else:
+                samples = [torch.from_numpy(sample).to(torch.float) for sample in self.preprocess_samples(target)]
             embs = []
             for sample in tqdm(samples):
                 v = pooling.embedd(sample)

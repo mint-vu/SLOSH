@@ -47,7 +47,7 @@ class FSP():
         self.reduce = reduce
         
     def embedd(self, x):
-        ref_size = self.ref_size // x.shape[1]
+        ref_size = self.ref_size
         ref_domain = torch.linspace(0, 1, ref_size).repeat(x.shape[1], 1)
         x_sorted, _ = torch.sort(x, dim=0, descending=True)
 
