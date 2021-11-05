@@ -19,7 +19,7 @@ from torch_geometric.transforms import SamplePoints
 class Experiment():
     def __init__(self, dataset, pooling, ann,
                  k=9, project=False, projector='pca', n_components=2, ref_size=None, code_length=None, random_state=0, **kwargs):
-        self.dim_dict = {'point_mnist': 2, 'oxford': 512}
+        self.dim_dict = {'point_mnist': 2, 'oxford': 512, 'modelnet40': 3}
         self.projector_dict = {'pca': PCA(n_components=n_components),
                                'kernel_pca': KernelPCA(n_components=n_components, kernel='cosine'),
                                'umap': umap.UMAP(n_components=n_components, verbose=True)}
@@ -111,9 +111,9 @@ class Experiment():
             data_test_ = ModelNet(root='../modelnet', name='40', train=False, transform=SamplePoints(1024))
 
             X_train_ = np.array([data_train_[i].pos.numpy() for i in range(len(data_train_))])
-            y_train = np.array([data_train_[i].y.numpy() for i in range(len(data_train_))])
+            y_train = np.array([data_train_[i].y.numpy() for i in range(len(data_train_))]).squeeze()
             X_test_ = np.array([data_test_[i].pos.numpy() for i in range(len(data_test_))])
-            y_test = np.array([data_test_[i].y.numpy() for i in range(len(data_test_))])
+            y_test = np.array([data_test_[i].y.numpy() for i in range(len(data_test_))]).squeeze()
             def z_normalize(data):
                 mu = np.mean(data,axis=(1,2),keepdims=True)
                 sigma = np.std(data,axis=(1,2),keepdims=True)
