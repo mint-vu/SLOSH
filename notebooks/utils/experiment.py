@@ -49,11 +49,12 @@ class Experiment():
         ann = self.ann
 
         start = time.time()
-        if self.ann_name == 'faiss-lsh':
+        if self.ann_name in ['faiss-lsh', 'faiss-exact']:
             D, I = ann.search(test_emb, self.k)
 
             labels = self.data['y_train']
             knn_labels = labels[I]
+
 
         passed = time.time() - start
         self.exp_report['inf_time_per_sample'] = passed / test_emb.shape[0]
@@ -69,13 +70,18 @@ class Experiment():
         return acc
 
     def train_ann(self):
-        assert self.ann_name in ['faiss-lsh', 'annoy']
+        assert self.ann_name in ['faiss-lsh', 'faiss-exact']
         if self.ann_name == 'faiss-lsh':
             emb = self.embedding
             d = emb.shape[1]
             n_bits = self.code_length * 2
             ann = faiss.IndexLSH(d, n_bits)
-            ann.train(emb)
+            # ann.train(emb)
+            ann.add(emb)
+        elif self.ann_name == 'faiss-exact':
+            emb = self.embedding
+            d = emb.shape[1]
+            ann = faiss.IndexFlatL2(d)
             ann.add(emb)
             
         return ann
@@ -104,19 +110,19 @@ class Experiment():
             y_test = np.array(y_test)
             
         elif self.dataset_name == 'modelnet40':
-            data_train_ = ModelNet(root='../dataset/modelnet', name='40', train=True, transform=SamplePoints(1024))
-            data_test_ = ModelNet(root='../dataset/modelnet', name='40', train=False, transform=SamplePoints(1024))
+            data_train_ = ModelNet(root='../modelnet', name='40', train=True, transform=SamplePoints(1024))
+            data_test_ = ModelNet(root='../modelnet', name='40', train=False, transform=SamplePoints(1024))
 
             X_train_ = np.array([data_train_[i].pos.numpy() for i in range(len(data_train_))])
             y_train = np.array([data_train_[i].y.numpy() for i in range(len(data_train_))]).squeeze()
             X_test_ = np.array([data_test_[i].pos.numpy() for i in range(len(data_test_))])
             y_test = np.array([data_test_[i].y.numpy() for i in range(len(data_test_))]).squeeze()
-            def z_normalize(data):
-                mu = np.mean(data,axis=(1,2),keepdims=True)
-                sigma = np.std(data,axis=(1,2),keepdims=True)
-                return (data-mu)/sigma
-            X_train = z_normalize(X_train_)
-            X_test = z_normalize(X_test_)
+            def normalize(data):
+                sample_min = np.amin(data,axis=1,keepdims=True)
+                sample_max = np.amax(data,axis=(1,2),keepdims=True)
+                return (data-sample_min)/sample_max
+            X_train = normalize(X_train_)
+            X_test = normalize(X_test_)
 
         return {'x_train': X_train, 'y_train': y_train, 'x_test': X_test, 'y_test': y_test}
 
@@ -125,7 +131,7 @@ class Experiment():
         if self.pooling_name == 'swe':
             assert 'num_slices' in kwargs.keys(), 'keyword argument num_slices should be provided'
             ref = self.init_reference()
-            pooling = SWE(ref, kwargs['num_slices'])
+            pooling = SWE(ref, kwargs['num_slices'], random_state=self.state)
         elif self.pooling_name == 'fs':
             ref = self.init_reference()
             pooling = FSP(ref, self.ref_size)
