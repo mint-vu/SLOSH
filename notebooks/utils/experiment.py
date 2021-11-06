@@ -1,6 +1,5 @@
 import numpy as np
 from sklearn.metrics import accuracy_score
-from sklearn.cluster import KMeans
 import torch
 import pandas as pd
 import pickle
@@ -11,7 +10,6 @@ from scipy import stats
 from tqdm import tqdm
 import time
 from sklearn.decomposition import PCA, KernelPCA
-import umap
 from torch_geometric.datasets import ModelNet
 from torch_geometric.transforms import SamplePoints
 
@@ -21,8 +19,7 @@ class Experiment():
                  k=9, project=False, projector='pca', n_components=2, ref_size=None, code_length=None, random_state=0, **kwargs):
         self.dim_dict = {'point_mnist': 2, 'oxford': 512, 'modelnet40': 3}
         self.projector_dict = {'pca': PCA(n_components=n_components),
-                               'kernel_pca': KernelPCA(n_components=n_components, kernel='cosine'),
-                               'umap': umap.UMAP(n_components=n_components, verbose=True)}
+                               'kernel_pca': KernelPCA(n_components=n_components, kernel='cosine')}
         self.dataset_name = dataset
         self.pooling_name = pooling
         self.ann_name = ann
@@ -107,8 +104,8 @@ class Experiment():
             y_test = np.array(y_test)
             
         elif self.dataset_name == 'modelnet40':
-            data_train_ = ModelNet(root='../modelnet', name='40', train=True, transform=SamplePoints(1024))
-            data_test_ = ModelNet(root='../modelnet', name='40', train=False, transform=SamplePoints(1024))
+            data_train_ = ModelNet(root='../dataset/modelnet', name='40', train=True, transform=SamplePoints(1024))
+            data_test_ = ModelNet(root='../dataset/modelnet', name='40', train=False, transform=SamplePoints(1024))
 
             X_train_ = np.array([data_train_[i].pos.numpy() for i in range(len(data_train_))])
             y_train = np.array([data_train_[i].y.numpy() for i in range(len(data_train_))]).squeeze()
@@ -127,7 +124,7 @@ class Experiment():
         assert self.pooling_name in ['swe', 'fs', 'cov', 'gem'], f'unknown pooling {self.pooling_name}'
         if self.pooling_name == 'swe':
             assert 'num_slices' in kwargs.keys(), 'keyword argument num_slices should be provided'
-            ref = self.init_reference(num_slices=kwargs['num_slices'])
+            ref = self.init_reference()
             pooling = SWE(ref, kwargs['num_slices'])
         elif self.pooling_name == 'fs':
             ref = self.init_reference()
@@ -142,9 +139,9 @@ class Experiment():
             
         return pooling
     
-    def init_reference(self, **kwargs):
+    def init_reference(self):
         if self.pooling_name == 'swe':
-            ref = torch.ones(self.ref_size, self.n_components)
+            ref = torch.ones(self.ref_size, self.n_components).to(torch.float)
 
         elif self.pooling_name == 'fs':
             ref = torch.ones(self.ref_size, self.n_components).to(torch.float)
