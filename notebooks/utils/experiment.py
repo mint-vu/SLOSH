@@ -10,13 +10,14 @@ from scipy import stats
 from tqdm import tqdm
 import time
 from sklearn.decomposition import PCA, KernelPCA
+from sklearn.model_selection import train_test_split
 from torch_geometric.datasets import ModelNet
 from torch_geometric.transforms import SamplePoints
 
 
 class Experiment():
     def __init__(self, dataset, pooling, ann,
-                 k=9, project=False, projector='pca', n_components=2, ref_size=None, code_length=None, random_state=0, **kwargs):
+                 k=9, project=False, projector='pca', n_components=2, ref_size=None, code_length=None, random_state=0, mode='test', **kwargs):
         self.dim_dict = {'point_mnist': 2, 'oxford': 512, 'modelnet40': 3}
         self.projector_dict = {'pca': PCA(n_components=n_components),
                                'kernel_pca': KernelPCA(n_components=n_components, kernel='cosine')}
@@ -31,7 +32,8 @@ class Experiment():
                            'ann': ann,
                            'k': k,
                            'code_length': code_length}
-        
+
+        self.mode = mode
         self.data = self.load_dataset()
         self.ref_size = ref_size
         self.n_components = n_components if project else self.dim_dict[self.dataset_name]
@@ -109,28 +111,46 @@ class Experiment():
             y_test = np.array(y_test)
             
         elif self.dataset_name == 'modelnet40':
-            data_train_ = ModelNet(root='../modelnet', name='40', train=True, transform=SamplePoints(1024))
-            data_test_ = ModelNet(root='../modelnet', name='40', train=False, transform=SamplePoints(1024))
+            if os.path.exists('../modelnet40/train_test.pkl'):
+                with open('../modelnet40/train_test.pkl', 'rb') as f:
+                    processed = pickle.load(f)
+                X_train, X_test, y_train, y_test = processed['x_train'], processed['y_train'], processed['x_test'], processed['y_test']
 
-            mean = 512
-            sigma = 64
+            else:
+                data_train_ = ModelNet(root='../modelnet', name='40', train=True, transform=SamplePoints(1024))
+                data_test_ = ModelNet(root='../modelnet', name='40', train=False, transform=SamplePoints(1024))
 
-            np.random.seed(self.state)
-            train_num_points = np.floor(sigma * np.random.randn(len(data_train_)) + mean).astype(int)
-            test_num_points = np.floor(sigma * np.random.randn(len(data_test_)) + mean).astype(int)
+                mean = 512
+                sigma = 64
 
-            X_train_ = np.array([data_train_[i].pos.numpy()[:train_num_points[i]] for i in range(len(data_train_))])
-            y_train = np.array([data_train_[i].y.numpy() for i in range(len(data_train_))]).squeeze()
-            X_test_ = np.array([data_test_[i].pos.numpy()[:test_num_points[i]] for i in range(len(data_test_))])
-            y_test = np.array([data_test_[i].y.numpy() for i in range(len(data_test_))]).squeeze()
+                np.random.seed(self.state)
+                train_num_points = np.floor(sigma * np.random.randn(len(data_train_)) + mean).astype(int)
+                test_num_points = np.floor(sigma * np.random.randn(len(data_test_)) + mean).astype(int)
 
-            def normalize(data):
-                sample_min = np.amin(data,axis=1,keepdims=True)
-                sample_max = np.amax(data,axis=(1,2),keepdims=True)
-                return (data-sample_min)/sample_max
+                X_train_ = [data_train_[i].pos.numpy()[:train_num_points[i]] for i in range(len(data_train_))]
+                y_train = np.array([data_train_[i].y.numpy() for i in range(len(data_train_))]).squeeze()
+                X_test_ = [data_test_[i].pos.numpy()[:test_num_points[i]] for i in range(len(data_test_))]
+                y_test = np.array([data_test_[i].y.numpy() for i in range(len(data_test_))]).squeeze()
 
-            X_train = normalize(X_train_)
-            X_test = normalize(X_test_)
+                def normalize(data):
+                    normalized = []
+                    for sample in data:
+                        sample_min = sample.min(0)
+                        sample_max = sample.max()
+                        normalized.append((sample - sample_min) / sample_max)
+                    return normalized
+
+                X_train = normalize(X_train_)
+                X_test = normalize(X_test_)
+
+                with open('../modelnet40/train_test.pkl', 'wb') as f:
+                    processed = {'x_train': X_train, 'y_train': y_train, 'x_test': X_test, 'y_test': y_test}
+                    pickle.dump(processed, f)
+
+        if self.mode == 'validation':
+            print('validation mode...')
+            X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, test_size=0.1, random_state=self.state)
+            print(X_train.shape, X_test.shape)
 
         return {'x_train': X_train, 'y_train': y_train, 'x_test': X_test, 'y_test': y_test}
 
@@ -190,7 +210,7 @@ class Experiment():
         elif self.pooling_name == 'swe':
             emb_dir = f'results/cached_emb/{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.ref_size}.npy'
 
-        if not os.path.exists(emb_dir):
+        if not os.path.exists(emb_dir) or self.mode != 'test':
             out_dir = os.path.dirname(emb_dir)
             os.makedirs(out_dir, exist_ok=True)
             emb, time_passed = self.compute_embedding(target)
