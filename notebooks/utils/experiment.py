@@ -12,7 +12,7 @@ import time
 from sklearn.decomposition import PCA, KernelPCA
 from sklearn.model_selection import train_test_split
 from torch_geometric.datasets import ModelNet
-from torch_geometric.transforms import SamplePoints
+from torch_geometric.transforms import SamplePoints, RandomRotate, Compose
 
 
 class Experiment():
