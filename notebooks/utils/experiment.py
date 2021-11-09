@@ -29,6 +29,7 @@ class Experiment():
         self.exp_report = {'dataset': dataset,
                            'pooling': pooling,
                            'ann': ann,
+                           'k': k,
                            'code_length': code_length}
         
         self.data = self.load_dataset()
@@ -55,7 +56,6 @@ class Experiment():
             labels = self.data['y_train']
             knn_labels = labels[I]
 
-
         passed = time.time() - start
         self.exp_report['inf_time_per_sample'] = passed / test_emb.shape[0]
 
@@ -76,7 +76,6 @@ class Experiment():
             d = emb.shape[1]
             n_bits = self.code_length * 2
             ann = faiss.IndexLSH(d, n_bits)
-            # ann.train(emb)
             ann.add(emb)
         elif self.ann_name == 'faiss-exact':
             emb = self.embedding
@@ -175,13 +174,18 @@ class Experiment():
     def load_embedding(self, target):
         if self.pooling_name == 'gem':
             emb_dir = f'results/cached_emb/{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.power}.npy'
-        else:
+        elif self.pooling_name == 'cov':
+            emb_dir = f'results/cached_emb/{self.dataset_name}_{self.ann_name}_{self.pooling_name}.npy'
+        elif self.pooling_name == 'fs':
             emb_dir = f'results/cached_emb/{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.ref_size}.npy'
+        elif self.pooling_name == 'swe':
+            emb_dir = f'results/cached_emb/{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.ref_size}.npy'
+
         if not os.path.exists(emb_dir):
             out_dir = os.path.dirname(emb_dir)
             os.makedirs(out_dir, exist_ok=True)
             emb, time_passed = self.compute_embedding(target)
-            # np.save(emb_dir, emb)
+            np.save(emb_dir, emb)
         else:
             print('loading cached base embedding...')
             emb = np.load(emb_dir)
