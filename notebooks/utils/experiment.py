@@ -112,14 +112,23 @@ class Experiment():
             data_train_ = ModelNet(root='../modelnet', name='40', train=True, transform=SamplePoints(1024))
             data_test_ = ModelNet(root='../modelnet', name='40', train=False, transform=SamplePoints(1024))
 
-            X_train_ = np.array([data_train_[i].pos.numpy() for i in range(len(data_train_))])
+            mean = 512
+            sigma = 64
+
+            np.random.seed(self.state)
+            train_num_points = np.floor(sigma * np.random.randn(len(data_train_)) + mean).astype(int)
+            test_num_points = np.floor(sigma * np.random.randn(len(data_test_)) + mean).astype(int)
+
+            X_train_ = np.array([data_train_[i].pos.numpy()[:train_num_points[i]] for i in range(len(data_train_))])
             y_train = np.array([data_train_[i].y.numpy() for i in range(len(data_train_))]).squeeze()
-            X_test_ = np.array([data_test_[i].pos.numpy() for i in range(len(data_test_))])
+            X_test_ = np.array([data_test_[i].pos.numpy()[:test_num_points[i]] for i in range(len(data_test_))])
             y_test = np.array([data_test_[i].y.numpy() for i in range(len(data_test_))]).squeeze()
+
             def normalize(data):
                 sample_min = np.amin(data,axis=1,keepdims=True)
                 sample_max = np.amax(data,axis=(1,2),keepdims=True)
                 return (data-sample_min)/sample_max
+
             X_train = normalize(X_train_)
             X_test = normalize(X_test_)
 
