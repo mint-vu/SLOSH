@@ -117,8 +117,9 @@ class Experiment():
                 X_train, X_test, y_train, y_test = processed['x_train'], processed['y_train'], processed['x_test'], processed['y_test']
 
             else:
-                data_train_ = ModelNet(root='../modelnet', name='40', train=True, transform=SamplePoints(1024))
-                data_test_ = ModelNet(root='../modelnet', name='40', train=False, transform=SamplePoints(1024))
+                transforms = Compose([SamplePoints(1024),RandomRotate((-45,45), axis=2)])
+                data_train_ = ModelNet(root='../modelnet', name='40', train=True, transform=transforms)
+                data_test_ = ModelNet(root='../modelnet', name='40', train=False, transform=transforms)
 
                 mean = 512
                 sigma = 64
