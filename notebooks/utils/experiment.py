@@ -17,7 +17,8 @@ from torch_geometric.transforms import SamplePoints, RandomRotate, Compose
 
 class Experiment():
     def __init__(self, dataset, pooling, ann,
-                 k=9, project=False, projector='pca', n_components=2, ref_size=None, code_length=None, random_state=0, mode='test', **kwargs):
+                 k=9, project=False, projector='pca', n_components=2,
+                 ref_size=None, code_length=None, num_slices=None, random_state=0, mode='test', **kwargs):
         self.dim_dict = {'point_mnist': 2, 'oxford': 512, 'modelnet40': 3}
         self.projector_dict = {'pca': PCA(n_components=n_components),
                                'kernel_pca': KernelPCA(n_components=n_components, kernel='cosine')}
@@ -26,6 +27,7 @@ class Experiment():
         self.ann_name = ann
         self.k = k
         self.code_length = code_length
+        self.num_slices = num_slices
         self.state = random_state
         self.exp_report = {'dataset': dataset,
                            'pooling': pooling,
@@ -114,7 +116,7 @@ class Experiment():
             if os.path.exists('../modelnet40/train_test.pkl'):
                 with open('../modelnet40/train_test.pkl', 'rb') as f:
                     processed = pickle.load(f)
-                X_train, X_test, y_train, y_test = processed['x_train'], processed['y_train'], processed['x_test'], processed['y_test']
+                X_train, y_train, X_test, y_test = processed['x_train'], processed['y_train'], processed['x_test'], processed['y_test']
 
             else:
                 transforms = Compose([SamplePoints(1024),RandomRotate((-45,45), axis=2)])
@@ -151,16 +153,16 @@ class Experiment():
         if self.mode == 'validation':
             print('validation mode...')
             X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, test_size=0.1, random_state=self.state)
-            print(X_train.shape, X_test.shape)
+            print(len(X_train), len(X_test))
 
         return {'x_train': X_train, 'y_train': y_train, 'x_test': X_test, 'y_test': y_test}
 
     def init_pooling(self, **kwargs):
         assert self.pooling_name in ['swe', 'fs', 'cov', 'gem'], f'unknown pooling {self.pooling_name}'
         if self.pooling_name == 'swe':
-            assert 'num_slices' in kwargs.keys(), 'keyword argument num_slices should be provided'
+            assert self.num_slices is not None, 'keyword argument num_slices should be provided'
             ref = self.init_reference()
-            pooling = SWE(ref, kwargs['num_slices'], random_state=self.state)
+            pooling = SWE(ref, self.num_slices, random_state=self.state)
         elif self.pooling_name == 'fs':
             ref = self.init_reference()
             pooling = FSP(ref, self.ref_size)
@@ -203,15 +205,15 @@ class Experiment():
         
     def load_embedding(self, target):
         if self.pooling_name == 'gem':
-            emb_dir = f'results/cached_emb/{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.power}.npy'
+            emb_dir = f'results/cached_emb/{self.mode}_{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.power}.npy'
         elif self.pooling_name == 'cov':
-            emb_dir = f'results/cached_emb/{self.dataset_name}_{self.ann_name}_{self.pooling_name}.npy'
+            emb_dir = f'results/cached_emb/{self.mode}_{self.dataset_name}_{self.ann_name}_{self.pooling_name}.npy'
         elif self.pooling_name == 'fs':
-            emb_dir = f'results/cached_emb/{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.ref_size}.npy'
+            emb_dir = f'results/cached_emb/{self.mode}_{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.ref_size}.npy'
         elif self.pooling_name == 'swe':
-            emb_dir = f'results/cached_emb/{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.ref_size}.npy'
+            emb_dir = f'results/cached_emb/{self.mode}_{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.ref_size}_{self.num_slices}.npy'
 
-        if not os.path.exists(emb_dir) or self.mode != 'test':
+        if not os.path.exists(emb_dir):
             out_dir = os.path.dirname(emb_dir)
             os.makedirs(out_dir, exist_ok=True)
             emb, time_passed = self.compute_embedding(target)
