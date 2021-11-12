@@ -15,10 +15,11 @@ class SWE():
         self.sliced_ref_cdf = torch.cumsum(torch.ones_like(self.sliced_ref), 0)/self.M
 
     def generate_theta(self, d, L):
-        torch.manual_seed(self.state)
-        theta = [th / torch.sqrt(torch.sum((th**2))) for th in torch.randn(L, d)]
+#         torch.manual_seed(self.state)
+#         theta = [th / torch.sqrt(torch.sum((th**2))) for th in torch.randn(L, d)]
+        theta = self.fibonacci_sphere(L)
 
-        return torch.stack(theta, dim=0) 
+        return theta 
 
     def slicer(self, X):
         if len(self.theta.shape) == 1:
@@ -38,6 +39,25 @@ class SWE():
 
         embedd=(mongeMap-self.sliced_ref)/self.M
         return embedd
+    
+    def fibonacci_sphere(self,L):
+        points = []
+        phi = np.pi * (3. - np.sqrt(5.))  # golden angle in radians
+        counter=0
+        i=0
+        while counter<L:
+            theta = phi * i  # golden angle increment
+            if np.mod(theta,2*np.pi)<=np.pi:
+              y = 1 - (counter / float(L - 1)) * 2  # y goes from 1 to -1
+              radius = np.sqrt(1 - y * y)  # radius at y              
+              x = np.cos(theta) * radius        
+              z = np.sin(theta) * radius
+              points.append((x, y, z))
+              counter+=1
+            i+=1
+        return torch.from_numpy(np.array(points)).to(torch.float)
+    
+    
     
     
 class FSP():

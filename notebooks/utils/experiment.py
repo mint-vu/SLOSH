@@ -111,13 +111,13 @@ class Experiment():
             y_test = np.array(y_test)
             
         elif self.dataset_name == 'modelnet40':
-            if os.path.exists('../modelnet40/train_test.pkl'):
-                with open('../modelnet40/train_test.pkl', 'rb') as f:
+            if os.path.exists('../modelnet/train_test.pkl'):
+                with open('../modelnet/train_test.pkl', 'rb') as f:
                     processed = pickle.load(f)
-                X_train, X_test, y_train, y_test = processed['x_train'], processed['y_train'], processed['x_test'], processed['y_test']
+                X_train, y_train, X_test, y_test = processed['x_train'], processed['y_train'], processed['x_test'], processed['y_test']
 
             else:
-                transforms = Compose([SamplePoints(1024),RandomRotate((-45,45), axis=2)])
+                transforms = Compose([SamplePoints(1024),RandomRotate((0,45), axis=0)])
                 data_train_ = ModelNet(root='../modelnet', name='40', train=True, transform=transforms)
                 data_test_ = ModelNet(root='../modelnet', name='40', train=False, transform=transforms)
 
@@ -143,15 +143,15 @@ class Experiment():
 
                 X_train = normalize(X_train_)
                 X_test = normalize(X_test_)
+                
 
-                with open('../modelnet40/train_test.pkl', 'wb') as f:
+                with open('../modelnet/train_test.pkl', 'wb') as f:
                     processed = {'x_train': X_train, 'y_train': y_train, 'x_test': X_test, 'y_test': y_test}
                     pickle.dump(processed, f)
-
         if self.mode == 'validation':
             print('validation mode...')
             X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, test_size=0.1, random_state=self.state)
-            print(X_train.shape, X_test.shape)
+            print(len(X_train), len(X_test))
 
         return {'x_train': X_train, 'y_train': y_train, 'x_test': X_test, 'y_test': y_test}
 
