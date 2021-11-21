@@ -19,7 +19,7 @@ class Experiment():
     def __init__(self, dataset, pooling, ann,
                  k=9, project=False, projector='pca', n_components=2,
                  ref_size=None, code_length=None, num_slices=None, random_state=0, mode='test', **kwargs):
-        self.dim_dict = {'point_mnist': 2, 'oxford': 512, 'modelnet40': 3}
+        self.dim_dict = {'point_mnist': 2, 'oxford': 8, 'modelnet40': 3}
         self.projector_dict = {'pca': PCA(n_components=n_components),
                                'kernel_pca': KernelPCA(n_components=n_components, kernel='cosine')}
         self.dataset_name = dataset
@@ -139,8 +139,9 @@ class Experiment():
                     normalized = []
                     for sample in data:
                         sample_min = sample.min(0)
+                        sample = sample - sample_min
                         sample_max = sample.max()
-                        normalized.append((sample - sample_min) / sample_max)
+                        normalized.append(sample / sample_max)
                     return normalized
 
                 X_train = normalize(X_train_)
@@ -178,7 +179,8 @@ class Experiment():
     
     def init_reference(self):
         if self.pooling_name == 'swe':
-            ref = torch.ones(self.ref_size, self.n_components).to(torch.float)
+            torch.manual_seed(self.state)
+            ref = torch.rand(self.ref_size, self.n_components).to(torch.float)
 
         elif self.pooling_name == 'fs':
             ref = torch.ones(self.ref_size, self.n_components).to(torch.float)
@@ -243,6 +245,8 @@ class Experiment():
             embs = []
             for sample in tqdm(samples):
                 v = pooling.embedd(sample)
+                if self.dataset_name == 'oxford':
+                    v= v**2/torch.sum(v**2)
                 embs.append(v)
 
             embs = torch.stack(embs, dim=0)
