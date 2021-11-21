@@ -105,10 +105,10 @@ class Experiment():
             X_test = X_test.reshape(X_test.shape[0], -1, 3)
 
         elif self.dataset_name == 'oxford':
-            with open('../dataset/oxford/train_test.pkl', 'rb') as f:
+            with open('../dataset/oxford/train_test_AE8_v2.pkl', 'rb') as f:
                 data = pickle.load(f)
 
-            X_train, y_train, X_test, y_test, classnames = data
+            X_train, y_train, Path_train, X_test, y_test, Path_test, labels = data
             y_train = np.array(y_train)
             y_test = np.array(y_test)
             
