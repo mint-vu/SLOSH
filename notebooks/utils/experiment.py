@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn.metrics import accuracy_score
+from sklearn.cluster import KMeans
 import torch
 import pandas as pd
 import pickle
@@ -18,7 +19,7 @@ from torch_geometric.transforms import SamplePoints, RandomRotate, Compose
 class Experiment():
     def __init__(self, dataset, pooling, ann,
                  k=9, project=False, projector='pca', n_components=2,
-                 ref_size=None, code_length=None, num_slices=None, random_state=0, mode='test', **kwargs):
+                 ref_size=None, code_length=None, num_slices=None, ref_func=None, power=None, random_state=0, mode='test'):
         self.dim_dict = {'point_mnist': 2, 'oxford': 8, 'modelnet40': 3}
         self.projector_dict = {'pca': PCA(n_components=n_components),
                                'kernel_pca': KernelPCA(n_components=n_components, kernel='cosine')}
@@ -28,6 +29,8 @@ class Experiment():
         self.k = k
         self.code_length = code_length
         self.num_slices = num_slices
+        self.ref_func = ref_func
+        self.power = power
         self.state = random_state
         self.exp_report = {'dataset': dataset,
                            'pooling': pooling,
@@ -41,7 +44,7 @@ class Experiment():
         self.n_components = n_components if project else self.dim_dict[self.dataset_name]
         self.project = project
         self.projector = self.projector_dict[projector]
-        self.pooling = self.init_pooling(**kwargs)
+        self.pooling = self.init_pooling()
         self.embedding = self.load_embedding('base')
         self.ann = self.train_ann()
 
@@ -98,17 +101,18 @@ class Experiment():
             
             X_train = df_train[df_train.columns[1:]].to_numpy()
             y_train = df_train[df_train.columns[0]].to_numpy()
-            X_train = X_train.reshape(X_train.shape[0], -1, 3)
+            X_train = X_train.reshape(X_train.shape[0], -1, 3).astype(np.float) / 28
             
             X_test = df_test[df_test.columns[1:]].to_numpy()
             y_test = df_test[df_test.columns[0]].to_numpy()
-            X_test = X_test.reshape(X_test.shape[0], -1, 3)
+            X_test = X_test.reshape(X_test.shape[0], -1, 3).astype(np.float) / 28
 
         elif self.dataset_name == 'oxford':
-            with open('../dataset/oxford/train_test_AE8_v2.pkl', 'rb') as f:
+            with open('../dataset/oxford/train_test_AE8.pkl', 'rb') as f:
                 data = pickle.load(f)
 
-            X_train, y_train, Path_train, X_test, y_test, Path_test, labels = data
+            X_train, y_train, X_test, y_test, classnames = data
+
             y_train = np.array(y_train)
             y_test = np.array(y_test)
             
@@ -119,7 +123,7 @@ class Experiment():
                 X_train, y_train, X_test, y_test = processed['x_train'], processed['y_train'], processed['x_test'], processed['y_test']
 
             else:
-                transforms = Compose([SamplePoints(1024),RandomRotate((0,45), axis=0)])
+                transforms = Compose([SamplePoints(1024), RandomRotate((0, 45), axis=0)])
                 data_train_ = ModelNet(root='../modelnet', name='40', train=True, transform=transforms)
                 data_test_ = ModelNet(root='../modelnet', name='40', train=False, transform=transforms)
 
@@ -139,18 +143,17 @@ class Experiment():
                     normalized = []
                     for sample in data:
                         sample_min = sample.min(0)
-                        sample = sample - sample_min
                         sample_max = sample.max()
-                        normalized.append(sample / sample_max)
+                        normalized.append((sample - sample_min) / sample_max)
                     return normalized
 
                 X_train = normalize(X_train_)
                 X_test = normalize(X_test_)
-                
 
-                with open('../modelnet/train_test.pkl', 'wb') as f:
+                with open('../modelnet40/train_test.pkl', 'wb') as f:
                     processed = {'x_train': X_train, 'y_train': y_train, 'x_test': X_test, 'y_test': y_test}
                     pickle.dump(processed, f)
+
         if self.mode == 'validation':
             print('validation mode...')
             X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, test_size=0.1, random_state=self.state)
@@ -158,7 +161,7 @@ class Experiment():
 
         return {'x_train': X_train, 'y_train': y_train, 'x_test': X_test, 'y_test': y_test}
 
-    def init_pooling(self, **kwargs):
+    def init_pooling(self):
         assert self.pooling_name in ['swe', 'fs', 'cov', 'gem'], f'unknown pooling {self.pooling_name}'
         if self.pooling_name == 'swe':
             assert self.num_slices is not None, 'keyword argument num_slices should be provided'
@@ -168,10 +171,9 @@ class Experiment():
             ref = self.init_reference()
             pooling = FSP(ref, self.ref_size)
         elif self.pooling_name == 'gem':
-            assert 'power' in kwargs.keys(), 'keyword argument power should be provided'
-            self.power = kwargs['power']
-            self.exp_report['power'] = kwargs['power']
-            pooling = GeM(kwargs['power'])
+            assert self.power != None, 'keyword argument power should be provided'
+            self.exp_report['power'] = self.power
+            pooling = GeM(self.power)
         elif self.pooling_name == 'cov':
             pooling = Cov()
             
@@ -179,11 +181,38 @@ class Experiment():
     
     def init_reference(self):
         if self.pooling_name == 'swe':
-            torch.manual_seed(self.state)
-            ref = torch.rand(self.ref_size, self.n_components).to(torch.float)
+            if self.ref_func == 'KMeans':
+                print('preprocess samples...')
+                processed_samples_lst = self.preprocess_samples('base')
+                processed_samples = np.concatenate(processed_samples_lst, axis=0)
+                print('compute reference...')
+                np.random.seed(self.state)
+                if self.dataset_name == 'modelnet40':
+                    ind = np.random.permutation(processed_samples.shape[0])[:3000]
+                elif self.dataset_name == 'point_mnist':
+                    ind = np.random.permutation(processed_samples.shape[0])[:10000]
+                elif self.dataset_name == 'oxford':
+                    ind = np.random.permutation(processed_samples.shape[0])[:10000]
+                kmeans = KMeans(n_clusters=self.ref_size, random_state=self.state).fit(processed_samples[ind])
+                ref = torch.from_numpy(kmeans.cluster_centers_).to(torch.float)
+            elif self.ref_func == 'sample_points':
+                print('preprocess samples...')
+                processed_samples_lst = self.preprocess_samples('base')
+                processed_samples = np.concatenate(processed_samples_lst, axis=0)
+                print('compute reference...')
+                np.random.seed(self.state)
+                ind = np.random.permutation(processed_samples.shape[0])[:self.ref_size]
+                ref = torch.from_numpy(processed_samples[ind]).to(torch.float)
+            elif self.ref_func == 'rand':
+                torch.manual_seed(self.state)
+                ref = torch.rand(self.ref_size, self.n_components).to(torch.float)
+            elif self.ref_func == 'randn':
+                torch.manual_seed(self.state)
+                ref = torch.randn(self.ref_size, self.n_components).to(torch.float)
 
         elif self.pooling_name == 'fs':
-            ref = torch.ones(self.ref_size, self.n_components).to(torch.float)
+            torch.manual_seed(self.state)
+            ref = torch.rand(self.ref_size, self.n_components)
         
         return ref
 
@@ -193,17 +222,16 @@ class Experiment():
             processed_samples_lst = self.preprocess_samples('base')
 
             np.random.seed(self.state)
-            sample_ind = np.random.permutation(len(processed_samples_lst))[:5000]
+            sample_ind = np.random.permutation(len(processed_samples_lst))[:1000]
             selected_samples_lst = [processed_samples_lst[i] for i in sample_ind]
 
             np.random.seed(self.state)
             downsampled_samples = []
             for sample in tqdm(selected_samples_lst):
-                ind = np.random.permutation(sample.shape[0])[:1]
+                ind = np.random.permutation(sample.shape[0])[:10]
                 downsampled_samples.append(sample[ind, :])
             downsampled_samples = np.concatenate(downsampled_samples, axis=0)
             self.projector.fit(downsampled_samples)
-            # print(self.projector.explained_variance_ratio_)
         
     def load_embedding(self, target):
         if self.pooling_name == 'gem':
@@ -213,7 +241,7 @@ class Experiment():
         elif self.pooling_name == 'fs':
             emb_dir = f'results/cached_emb/{self.mode}_{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.ref_size}.npy'
         elif self.pooling_name == 'swe':
-            emb_dir = f'results/cached_emb/{self.mode}_{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.ref_size}_{self.num_slices}.npy'
+            emb_dir = f'results/cached_emb/{self.mode}_{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.ref_size}_{self.num_slices}_{self.ref_func}_{self.state}.npy'
 
         if not os.path.exists(emb_dir):
             out_dir = os.path.dirname(emb_dir)
@@ -246,7 +274,7 @@ class Experiment():
             for sample in tqdm(samples):
                 v = pooling.embedd(sample)
                 if self.dataset_name == 'oxford':
-                    v= v**2/torch.sum(v**2)
+                    v = v ** 2 / torch.sum(v ** 2)
                 embs.append(v)
 
             embs = torch.stack(embs, dim=0)
