@@ -15,11 +15,11 @@ class SWE():
         self.sliced_ref_cdf = torch.cumsum(torch.ones_like(self.sliced_ref), 0)/self.M
 
     def generate_theta(self, d, L):
-#         torch.manual_seed(self.state)
-#         theta = [th / torch.sqrt(torch.sum((th**2))) for th in torch.randn(L, d)]
-        theta = self.fibonacci_sphere(L)
+        torch.manual_seed(self.state)
+        theta = [th / torch.sqrt(torch.sum((th**2))) for th in torch.randn(L, d)]
+#         theta = self.fibonacci_sphere(L)
 
-        return theta 
+        return torch.stack(theta,dim=0)
 
     def slicer(self, X):
         if len(self.theta.shape) == 1:
