@@ -8,6 +8,6 @@ Set Locality Sensitive Hashing via Sliced Wasserstein Embedding
 
 ## notebooks:
 -  [```demo_for_pointmnist.ipynb```](./notebooks/demo_for_pointmnist.ipynb): demonstrates the retrieval results of the SLOSH and the baselines on the pointcloud mnist 2d dataset.
--  ```experiments_modelnet40.ipynb```: demonstrates the retrieval results of the SLOSH and the baselines on the ModelNet40 dataset.
--  ```modelnet40_normalization.ipynb```: visualizes examples of the normalized data from the ModelNet40 dataset.
--  ```sensitivity_to_code_length.ipynb```: shows the sensitivity to code length experiment on the pointcloud mnist 2d dataset.
+-  [```experiments_modelnet40.ipynb```](./notebooks/experiments_modelnet40.ipynb): demonstrates the retrieval results of the SLOSH and the baselines on the ModelNet40 dataset.
+-  [```modelnet40_normalization.ipynb```](./notebooks/modelnet40_normalization.ipynb): visualizes examples of the normalized data from the ModelNet40 dataset.
+-  [```sensitivity_to_code_length.ipynb```](./notebooks/sensitivity_to_code_length.ipynb): shows the sensitivity to code length experiment on the pointcloud mnist 2d dataset.
