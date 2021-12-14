@@ -10,6 +10,4 @@ Set Locality Sensitive Hashing via Sliced Wasserstein Embedding
 -  ```demo_for_pointmnist.ipynb```: demonstrates the retrieval results of the SLOSH and the baselines on the pointcloud mnist 2d dataset.
 -  ```experiments_modelnet40.ipynb```: demonstrates the retrieval results of the SLOSH and the baselines on the ModelNet40 dataset.
 -  ```modelnet40_normalization.ipynb```: visualizes examples of the normalized data from the ModelNet40 dataset.
--  ```VGG16_Feature_Extractor.ipynb```: contains the pretrained VGG16 as the feature extractor for oxford 5K dataset.
 -  ```sensitivity_to_code_length.ipynb```: shows the sensitivity to code length experiment on the pointcloud mnist 2d dataset.
-
