@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from .torchinterp import Interp1d
+import ot
 
 
 class SWE():
@@ -83,6 +84,18 @@ class FSP():
             return dot.mean(0)
 
         return dot
+
+
+class WE():
+    def __init__(self, ref):
+        self.ref = ref
+
+    def embedd(self, x):
+        C = ot.dist(x, self.ref, metric='euclidean').cpu().numpy()
+        gamma = torch.from_numpy(ot.emd(ot.unif(x.shape[0]), ot.unif(self.ref.shape[0]), C)).float()
+        emb =torch.matmul(gamma.T, x.cpu())/gamma.sum(dim=0).unsqueeze(1)
+        return emb
+
 
 
 class GeM():

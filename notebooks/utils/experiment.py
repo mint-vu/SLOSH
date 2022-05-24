@@ -4,7 +4,7 @@ from sklearn.cluster import KMeans
 import torch
 import pandas as pd
 import pickle
-from .poolings import SWE, FSP, GeM, Cov
+from .poolings import SWE, WE, FSP, GeM, Cov
 import os
 import faiss
 from scipy import stats
@@ -162,11 +162,14 @@ class Experiment():
         return {'x_train': X_train, 'y_train': y_train, 'x_test': X_test, 'y_test': y_test}
 
     def init_pooling(self):
-        assert self.pooling_name in ['swe', 'fs', 'cov', 'gem'], f'unknown pooling {self.pooling_name}'
+        assert self.pooling_name in ['swe', 'we', 'fs', 'cov', 'gem'], f'unknown pooling {self.pooling_name}'
         if self.pooling_name == 'swe':
             assert self.num_slices is not None, 'keyword argument num_slices should be provided'
             ref = self.init_reference()
             pooling = SWE(ref, self.num_slices, random_state=self.state)
+        elif self.pooling_name == 'we':
+            ref = self.init_reference()
+            pooling = WE(ref)
         elif self.pooling_name == 'fs':
             ref = self.init_reference()
             pooling = FSP(ref, self.ref_size)
@@ -180,7 +183,7 @@ class Experiment():
         return pooling
     
     def init_reference(self):
-        if self.pooling_name == 'swe':
+        if self.pooling_name == 'swe' or 'we':
             if self.ref_func == 'KMeans':
                 print('preprocess samples...')
                 processed_samples_lst = self.preprocess_samples('base')
@@ -242,6 +245,8 @@ class Experiment():
             emb_dir = f'results/cached_emb/{self.mode}_{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.ref_size}.npy'
         elif self.pooling_name == 'swe':
             emb_dir = f'results/cached_emb/{self.mode}_{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.ref_size}_{self.num_slices}_{self.ref_func}_{self.state}.npy'
+        elif self.pooling_name == 'we':
+            emb_dir = f'results/cached_emb/{self.mode}_{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.ref_size}_{self.ref_func}_{self.state}.npy'
 
         if not os.path.exists(emb_dir):
             out_dir = os.path.dirname(emb_dir)
@@ -261,7 +266,7 @@ class Experiment():
 
         print(f'compute {target} embedding...')
         start = time.time()
-        if self.pooling_name in ['swe', 'fs', 'gem', 'cov']:
+        if self.pooling_name in ['swe', 'we', 'fs', 'gem', 'cov']:
             preprocess_samples = self.preprocess_samples(target)
             if self.dataset_name == 'oxford' and self.project:
                 samples = []
