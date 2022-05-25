@@ -2,6 +2,8 @@ import numpy as np
 import torch
 from .torchinterp import Interp1d
 import ot
+# from multiprocessing import Pool
+from pathos.multiprocessing import ProcessingPool as Pool
 
 
 class SWE():
@@ -15,6 +17,11 @@ class SWE():
         self.sliced_ref_sorted, self.sliced_ref_sort_ind = torch.sort(self.sliced_ref, 0)
         self.sliced_ref_cdf = torch.cumsum(torch.ones_like(self.sliced_ref), 0)/self.M
 
+    def generate_ptheta(self, d, L):
+        torch.manual_seed(self.state)
+        theta = [th / torch.sqrt(torch.sum((th**2))) for th in torch.randn(L, d)]
+        return theta
+
     def generate_theta(self, d, L):
         torch.manual_seed(self.state)
         theta = [th / torch.sqrt(torch.sum((th**2))) for th in torch.randn(L, d)]
@@ -23,10 +30,33 @@ class SWE():
         return torch.stack(theta,dim=0)
 
     def slicer(self, X):
-        if len(self.theta.shape) == 1:
-            return torch.matmul(X, self.theta)
+        if isinstance(self.theta, list):
+            theta = torch.stack(self.theta, dim=0)
         else:
-            return torch.matmul(X, self.theta.T)
+            theta = self.theta
+
+        if len(theta.shape) == 1:
+            return torch.matmul(X, theta)
+        else:
+            return torch.matmul(X, theta.T)
+
+    # def embedd(self, x):
+    #     N,d=x.shape
+    #     assert d==self.dim
+    #
+    #     def f(th, i):
+    #         sliced_data = torch.matmul(x, th)
+    #         sliced_data_sorted, sliced_data_index = torch.sort(sliced_data, dim=0)
+    #         sliced_data_cdf = torch.cumsum(torch.ones_like(sliced_data),0)/N
+    #         mongeMap = Interp1d()(sliced_data_cdf, sliced_data_sorted, self.sliced_ref_cdf[:, i])
+    #         return mongeMap[self.sliced_ref_sort_ind[:,i]]
+    #
+    #     with Pool(self.num_slices) as p:
+    #         results = p.starmap(f, zip(self.theta, range(self.num_slices)))
+    #         mongeMap = torch.FloatTensor(results)
+    #
+    #     embedd=(mongeMap-self.sliced_ref)/self.M
+    #     return embedd
 
     def embedd(self, x):
         N,d=x.shape
@@ -35,6 +65,7 @@ class SWE():
         sliced_data_sorted, sliced_data_index = torch.sort(sliced_data, dim=0)
         sliced_data_cdf = torch.cumsum(torch.ones_like(sliced_data),0)/N
         mongeMap = Interp1d()(sliced_data_cdf.T, sliced_data_sorted.T, self.sliced_ref_cdf.T).T
+
         for l in range(self.num_slices):
             mongeMap[self.sliced_ref_sort_ind[:,l],l]=torch.clone(mongeMap[:,l])
 
@@ -58,9 +89,7 @@ class SWE():
             i+=1
         return torch.from_numpy(np.array(points)).to(torch.float)
     
-    
-    
-    
+
 class FSP():
     def __init__(self, ref, ref_size, reduce=False):
         self.ref = ref

@@ -20,7 +20,7 @@ class Experiment():
     def __init__(self, dataset, pooling, ann,
                  k=9, project=False, projector='pca', n_components=2,
                  ref_size=None, code_length=None, num_slices=None, ref_func=None, power=None, random_state=0, mode='test'):
-        self.dim_dict = {'point_mnist': 2, 'oxford': 8, 'modelnet40': 3}
+        self.dim_dict = {'gaussians': 2, 'point_mnist': 2, 'oxford': 8, 'modelnet40': 3}
         self.projector_dict = {'pca': PCA(n_components=n_components),
                                'kernel_pca': KernelPCA(n_components=n_components, kernel='cosine')}
         self.dataset_name = dataset
@@ -33,7 +33,7 @@ class Experiment():
         self.power = power
         self.state = random_state
         self.exp_report = {'dataset': dataset,
-                           'pooling': pooling,
+                           'pooling': pooling if power is None else pooling + '-' + str(power),
                            'ann': ann,
                            'k': k,
                            'code_length': code_length}
@@ -51,7 +51,7 @@ class Experiment():
     def get_exp_report(self):
         return self.exp_report
 
-    def test(self):
+    def test(self, nn_gts=None):
         test_emb, emb_time = self.compute_embedding('query')
         self.exp_report['emb_time_per_sample'] = emb_time
         ann = self.ann
@@ -74,6 +74,10 @@ class Experiment():
         self.exp_report['acc'] = acc
         self.exp_report['precision_k'] = precision_k
 
+        if nn_gts is not None:
+            result = (nn_gts.unsqueeze(1) == torch.from_numpy(I)).any(1)
+            self.exp_report['nn_acc'] = result.sum().item() / len(result)
+
         return acc
 
     def train_ann(self):
@@ -93,9 +97,14 @@ class Experiment():
         return ann
         
     def load_dataset(self):
-        assert self.dataset_name in ['point_mnist', 'modelnet40', 'oxford'], f'unknown dataset {self.dataset_name}'
+        assert self.dataset_name in ['gaussians', 'point_mnist', 'modelnet40', 'oxford'], f'unknown dataset {self.dataset_name}'
         print('loading dataset...')
-        if self.dataset_name == 'point_mnist':
+        if self.dataset_name == 'gaussians':
+            with open('../dataset/gaussians/data.pickle', 'rb') as handle:
+                data = pickle.load(handle)
+            X_train, X_test, y_train, y_test = data['x_train'],  data['x_test'],  data['y_train'],  data['y_test']
+
+        elif self.dataset_name == 'point_mnist':
             df_train = pd.read_csv("../dataset/pointcloud_mnist_2d/train.csv")
             df_test = pd.read_csv("../dataset/pointcloud_mnist_2d/test.csv")
             
@@ -300,7 +309,7 @@ class Experiment():
                 sample = X[i, :, :]
                 sample = sample[sample[:, 2] > 0][:, :2]
                 samples.append(sample)
-        elif self.dataset_name in ['oxford', 'modelnet40']:
+        elif self.dataset_name in ['gaussians', 'oxford', 'modelnet40']:
             samples = X
         
         return samples
