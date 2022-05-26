@@ -120,7 +120,7 @@ class WE():
         self.ref = ref
 
     def embedd(self, x):
-        C = ot.dist(x, self.ref, metric='euclidean').cpu().numpy()
+        C = ot.dist(x, self.ref).cpu().numpy()
         gamma = torch.from_numpy(ot.emd(ot.unif(x.shape[0]), ot.unif(self.ref.shape[0]), C)).float()
         emb =torch.matmul(gamma.T, x.cpu())/gamma.sum(dim=0).unsqueeze(1)
         return emb
