@@ -2,8 +2,6 @@ import numpy as np
 import torch
 from .torchinterp import Interp1d
 import ot
-# from multiprocessing import Pool
-from pathos.multiprocessing import ProcessingPool as Pool
 
 
 class SWE():
@@ -40,24 +38,6 @@ class SWE():
         else:
             return torch.matmul(X, theta.T)
 
-    # def embedd(self, x):
-    #     N,d=x.shape
-    #     assert d==self.dim
-    #
-    #     def f(th, i):
-    #         sliced_data = torch.matmul(x, th)
-    #         sliced_data_sorted, sliced_data_index = torch.sort(sliced_data, dim=0)
-    #         sliced_data_cdf = torch.cumsum(torch.ones_like(sliced_data),0)/N
-    #         mongeMap = Interp1d()(sliced_data_cdf, sliced_data_sorted, self.sliced_ref_cdf[:, i])
-    #         return mongeMap[self.sliced_ref_sort_ind[:,i]]
-    #
-    #     with Pool(self.num_slices) as p:
-    #         results = p.starmap(f, zip(self.theta, range(self.num_slices)))
-    #         mongeMap = torch.FloatTensor(results)
-    #
-    #     embedd=(mongeMap-self.sliced_ref)/self.M
-    #     return embedd
-
     def embedd(self, x):
         N,d=x.shape
         assert d==self.dim
@@ -72,7 +52,7 @@ class SWE():
         embedd=(mongeMap-self.sliced_ref)/self.M
         return embedd
     
-    def fibonacci_sphere(self,L):
+    def fibonacci_sphere(self, L):
         points = []
         phi = np.pi * (3. - np.sqrt(5.))  # golden angle in radians
         counter=0
@@ -124,7 +104,6 @@ class WE():
         gamma = torch.from_numpy(ot.emd(ot.unif(x.shape[0]), ot.unif(self.ref.shape[0]), C)).float()
         emb =torch.matmul(gamma.T, x.cpu())/gamma.sum(dim=0).unsqueeze(1)
         return emb
-
 
 
 class GeM():

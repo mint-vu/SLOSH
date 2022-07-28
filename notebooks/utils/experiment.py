@@ -88,6 +88,7 @@ class Experiment():
             n_bits = self.code_length * 2
             ann = faiss.IndexLSH(d, n_bits)
             ann.add(emb)
+
         elif self.ann_name == 'faiss-exact':
             emb = self.embedding
             d = emb.shape[1]
@@ -126,15 +127,16 @@ class Experiment():
             y_test = np.array(y_test)
             
         elif self.dataset_name == 'modelnet40':
-            if os.path.exists('../modelnet/train_test.pkl'):
-                with open('../modelnet/train_test.pkl', 'rb') as f:
+            data_dir = '../dataset/modelnet/'
+            if os.path.exists(f'{data_dir}/train_test.pkl'):
+                with open('../dataset/modelnet/train_test.pkl', 'rb') as f:
                     processed = pickle.load(f)
                 X_train, y_train, X_test, y_test = processed['x_train'], processed['y_train'], processed['x_test'], processed['y_test']
 
             else:
                 transforms = Compose([SamplePoints(1024), RandomRotate((0, 45), axis=0)])
-                data_train_ = ModelNet(root='../modelnet', name='40', train=True, transform=transforms)
-                data_test_ = ModelNet(root='../modelnet', name='40', train=False, transform=transforms)
+                data_train_ = ModelNet(root=data_dir, name='40', train=True, transform=transforms)
+                data_test_ = ModelNet(root=data_dir, name='40', train=False, transform=transforms)
 
                 mean = 512
                 sigma = 64
@@ -159,7 +161,7 @@ class Experiment():
                 X_train = normalize(X_train_)
                 X_test = normalize(X_test_)
 
-                with open('../modelnet40/train_test.pkl', 'wb') as f:
+                with open(f'{data_dir}/train_test.pkl', 'wb') as f:
                     processed = {'x_train': X_train, 'y_train': y_train, 'x_test': X_test, 'y_test': y_test}
                     pickle.dump(processed, f)
 
