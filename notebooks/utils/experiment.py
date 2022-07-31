@@ -44,7 +44,7 @@ class Experiment():
         self.n_components = n_components if project else self.dim_dict[self.dataset_name]
         self.project = project
         self.projector = self.projector_dict[projector]
-        self.pooling = self.init_pooling()
+        self.pooling = self.init_pooling(dataset)
         self.embedding = self.load_embedding('base')
         self.ann = self.train_ann()
 
@@ -134,7 +134,7 @@ class Experiment():
                 X_train, y_train, X_test, y_test = processed['x_train'], processed['y_train'], processed['x_test'], processed['y_test']
 
             else:
-                transforms = Compose([SamplePoints(1024), RandomRotate((0, 45), axis=0)])
+                transforms = Compose([SamplePoints(1024), RandomRotate((45, 45), axis=0)])
                 data_train_ = ModelNet(root=data_dir, name='40', train=True, transform=transforms)
                 data_test_ = ModelNet(root=data_dir, name='40', train=False, transform=transforms)
 
@@ -154,8 +154,8 @@ class Experiment():
                     normalized = []
                     for sample in data:
                         sample_min = sample.min(0)
-                        sample_max = sample.max()
-                        normalized.append((sample - sample_min) / sample_max)
+                        sample = sample - sample_min
+                        normalized.append((sample / sample.max()))
                     return normalized
 
                 X_train = normalize(X_train_)
@@ -172,12 +172,12 @@ class Experiment():
 
         return {'x_train': X_train, 'y_train': y_train, 'x_test': X_test, 'y_test': y_test}
 
-    def init_pooling(self):
+    def init_pooling(self, dataset):
         assert self.pooling_name in ['swe', 'we', 'fs', 'cov', 'gem'], f'unknown pooling {self.pooling_name}'
         if self.pooling_name == 'swe':
             assert self.num_slices is not None, 'keyword argument num_slices should be provided'
             ref = self.init_reference()
-            pooling = SWE(ref, self.num_slices, random_state=self.state)
+            pooling = SWE(ref, self.num_slices, dataset, random_state=self.state)
         elif self.pooling_name == 'we':
             ref = self.init_reference()
             pooling = WE(ref)
@@ -253,7 +253,7 @@ class Experiment():
         elif self.pooling_name == 'cov':
             emb_dir = f'results/cached_emb/{self.mode}_{self.dataset_name}_{self.ann_name}_{self.pooling_name}.npy'
         elif self.pooling_name == 'fs':
-            emb_dir = f'results/cached_emb/{self.mode}_{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.ref_size}.npy'
+            emb_dir = f'results/cached_emb/{self.mode}_{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.ref_size}_{self.state}.npy'
         elif self.pooling_name == 'swe':
             emb_dir = f'results/cached_emb/{self.mode}_{self.dataset_name}_{self.ann_name}_{self.pooling_name}_{self.ref_size}_{self.num_slices}_{self.ref_func}_{self.state}.npy'
         elif self.pooling_name == 'we':

@@ -1,13 +1,22 @@
 # SLOSH
-Set Locality Sensitive Hashing via Sliced Wasserstein Embedding
 
-## datasets used: 
-- [pointcloud mnist 2d](https://www.kaggle.com/cristiangarcia/pointcloudmnist2d): put downloaded data in ```/dataset/pointcloud_mnist_2d```
-- [ModelNet40](https://modelnet.cs.princeton.edu/): put downloaded data in ```/modelnet```
-- [oxford 5K](https://www.robots.ox.ac.uk/~vgg/data/oxbuildings/): the extracted 8-dimensional features are put in ```/dataset/oxford/train_test_AE8_v2.pkl```
+### Set Locality Sensitive Hashing via Sliced Wasserstein Embedding
 
-## notebooks:
--  [```demo_for_pointmnist.ipynb```](./notebooks/demo_for_pointmnist.ipynb): demonstrates the retrieval results of the SLOSH and the baselines on the pointcloud mnist 2d dataset.
--  [```experiments_modelnet40.ipynb```](./notebooks/experiments_modelnet40.ipynb): demonstrates the retrieval results of the SLOSH and the baselines on the ModelNet40 dataset.
--  [```modelnet40_normalization.ipynb```](./notebooks/modelnet40_normalization.ipynb): visualizes examples of the normalized data from the ModelNet40 dataset.
--  [```sensitivity_to_code_length.ipynb```](./notebooks/sensitivity_to_code_length.ipynb): shows the sensitivity to code length experiment on the pointcloud mnist 2d dataset.
+## Datasets: 
+- [Point Cloud MNIST 2d](https://www.kaggle.com/cristiangarcia/pointcloudmnist2d): put downloaded data in ```/dataset/pointcloud_mnist_2d```
+- [ModelNet40](https://modelnet.cs.princeton.edu/): put downloaded data in ```/dataset/modelnet```
+- [Oxford 5K](https://www.robots.ox.ac.uk/~vgg/data/oxbuildings/): put the extracted 8-dimensional features ```train_test_AE8.pkl``` in ```/dataset/oxford/```
+
+## Baselines:
+* Baselines:
+    - WE: Wasserstein Embedding
+    - FSPool: Featurewise Sort Pooling.
+    - Cov: Covariance Pooling.
+    - GeM-1: Generalized-Mean Pooling for power=1(average pooling). 
+    - GeM-2: Generalized-Mean Pooling for power=2.  
+    - GeM-4: Generalized-Mean Pooling for power=4.  
+
+## Code:
+- [```experiments.ipynb```](./notebooks/experiments.ipynb): notebook to reproduce results in table 1 and wall-clock analysis in our paper.
+- [```sensitivity_to_code_length.py```](./notebooks/sensitivity_to_code_length.py): scripts to perform sensitivity analysis on hash code length.
+- [```sensitivity_to_num_slices.py```](./notebooks/sensitivity_to_num_slices.py): scripts to perform sensitivity analysis on the number of slices used in SLOSH.

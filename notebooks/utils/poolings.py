@@ -4,13 +4,13 @@ from .torchinterp import Interp1d
 import ot
 
 
-class SWE():
-    def __init__(self, ref, L, random_state=0):
+class SWE:
+    def __init__(self, ref, L, dataset, random_state=0):
         self.M, self.dim = ref.shape
         self.ref = ref
         self.num_slices = L          
         self.state = random_state
-        self.theta = self.generate_theta(self.dim, L)
+        self.theta = self.generate_theta(self.dim, L, dataset)
         self.sliced_ref = self.slicer(self.ref)
         self.sliced_ref_sorted, self.sliced_ref_sort_ind = torch.sort(self.sliced_ref, 0)
         self.sliced_ref_cdf = torch.cumsum(torch.ones_like(self.sliced_ref), 0)/self.M
@@ -20,12 +20,15 @@ class SWE():
         theta = [th / torch.sqrt(torch.sum((th**2))) for th in torch.randn(L, d)]
         return theta
 
-    def generate_theta(self, d, L):
+    def generate_theta(self, d, L, dataset):
         torch.manual_seed(self.state)
-        theta = [th / torch.sqrt(torch.sum((th**2))) for th in torch.randn(L, d)]
-#         theta = self.fibonacci_sphere(L)
+        if dataset == 'modelnet40':
+            print('sample from fibonacci sphere')
+            theta = self.fibonacci_sphere(L)
+        else:
+            theta = torch.stack([th / torch.sqrt(torch.sum((th**2))) for th in torch.randn(L, d)], dim=0)
 
-        return torch.stack(theta,dim=0)
+        return theta
 
     def slicer(self, X):
         if isinstance(self.theta, list):
@@ -55,22 +58,22 @@ class SWE():
     def fibonacci_sphere(self, L):
         points = []
         phi = np.pi * (3. - np.sqrt(5.))  # golden angle in radians
-        counter=0
-        i=0
-        while counter<L:
+        counter = 0
+        i = 0
+        while counter < L:
             theta = phi * i  # golden angle increment
-            if np.mod(theta,2*np.pi)<=np.pi:
-              y = 1 - (counter / float(L - 1)) * 2  # y goes from 1 to -1
+            if np.mod(theta, 2 * np.pi) <= np.pi:
+              y = 1 - (counter / max(L - 1, 1)) * 2  # y goes from 1 to -1
               radius = np.sqrt(1 - y * y)  # radius at y              
               x = np.cos(theta) * radius        
               z = np.sin(theta) * radius
               points.append((x, y, z))
-              counter+=1
-            i+=1
+              counter += 1
+            i += 1
         return torch.from_numpy(np.array(points)).to(torch.float)
     
 
-class FSP():
+class FSP:
     def __init__(self, ref, ref_size, reduce=False):
         self.ref = ref
         self.ref_size = ref_size
@@ -95,18 +98,18 @@ class FSP():
         return dot
 
 
-class WE():
+class WE:
     def __init__(self, ref):
         self.ref = ref
 
     def embedd(self, x):
         C = ot.dist(x, self.ref).cpu().numpy()
         gamma = torch.from_numpy(ot.emd(ot.unif(x.shape[0]), ot.unif(self.ref.shape[0]), C)).float()
-        emb =torch.matmul(gamma.T, x.cpu())/gamma.sum(dim=0).unsqueeze(1)
+        emb = torch.matmul(gamma.T, x.cpu()) / gamma.sum(dim=0).unsqueeze(1)
         return emb
 
 
-class GeM():
+class GeM:
     def __init__(self, power):
         self.p = power
         
@@ -116,7 +119,7 @@ class GeM():
         return p_avg
 
 
-class Cov():
+class Cov:
     def __init__(self, lam=0.0001):
         self.lam = lam
 
