@@ -8,13 +8,12 @@
 - [Oxford 5K](https://www.robots.ox.ac.uk/~vgg/data/oxbuildings/): put the extracted 8-dimensional features ```train_test_AE8.pkl``` in ```/dataset/oxford/```
 
 ## Baselines:
-* Baselines:
-    - WE: Wasserstein Embedding
-    - FSPool: Featurewise Sort Pooling.
-    - Cov: Covariance Pooling.
-    - GeM-1: Generalized-Mean Pooling for power=1(average pooling). 
-    - GeM-2: Generalized-Mean Pooling for power=2.  
-    - GeM-4: Generalized-Mean Pooling for power=4.  
+  - WE: Wasserstein Embedding
+  - FSPool: Featurewise Sort Pooling.
+  - Cov: Covariance Pooling.
+  - GeM-1: Generalized-Mean Pooling for power=1(average pooling). 
+  - GeM-2: Generalized-Mean Pooling for power=2.  
+  - GeM-4: Generalized-Mean Pooling for power=4.  
 
 ## Code:
 - [```experiments.ipynb```](./notebooks/experiments.ipynb): notebook to reproduce results in table 1 and wall-clock analysis in our paper.
